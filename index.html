@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Workforce Dashboard (local file)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#F2F5F1; --panel:#FFFFFF; --ink:#1A2622; --muted:#5F6F68; --line:#DDE5DF;
+  --primary:#1F7A5C; --primary-ink:#FFFFFF; --amber:#E0A030; --danger:#C0503A; --blue:#3E6FB0;
+  --soft:#E7F0EA; --radius:10px;
+}
+@media (prefers-color-scheme:dark){
+  :root{ --bg:#111A16; --panel:#18241F; --ink:#E6EEE9; --muted:#97A89F; --line:#2A3A33; --soft:#1F2F28; --primary:#3FB68B; --primary-ink:#0D1713; }
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.5 "IBM Plex Sans","IBM Plex Sans Arabic",system-ui,sans-serif}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+[hidden]{display:none!important}
+
+/* top bar */
+.top{display:flex;align-items:center;gap:12px;padding:12px 24px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20;flex-wrap:wrap}
+.top h1{font-size:18px;font-weight:600;margin:0;margin-inline-end:auto}
+.top .who{color:var(--muted);font-size:13px}
+.btn{border:1px solid var(--line);background:var(--panel);padding:6px 12px;border-radius:8px;cursor:pointer}
+.btn:hover{background:var(--soft)}
+.btn.primary{background:var(--primary);color:var(--primary-ink);border-color:var(--primary)}
+.btn.primary:hover{filter:brightness(1.08)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:transparent;padding:6px 10px;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--primary);color:var(--primary-ink)}
+
+/* layout */
+.shell{display:grid;grid-template-columns:260px 1fr;gap:20px;padding:20px 24px;max-width:1600px;margin:0 auto}
+@media(max-width:960px){.shell{grid-template-columns:1fr;padding:14px}}
+aside.filters{position:sticky;top:70px;align-self:start;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;display:grid;gap:12px}
+@media(max-width:960px){aside.filters{position:static}}
+aside h2{margin:0;font-size:15px}
+label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}
+label.f input,label.f select,.ctl input,.ctl select{width:100%;padding:7px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
+main{display:grid;gap:20px;min-width:0}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;min-width:0}
+.panel h3{margin:0 0 12px;font-size:15px;font-weight:600}
+.panel .sub{color:var(--muted);font-size:12px;margin:-8px 0 12px}
+.head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.head h3{margin:0}
+
+/* hero */
+.hero{display:grid;grid-template-columns:minmax(260px,1.1fr) 2fr;gap:20px;align-items:stretch}
+@media(max-width:1100px){.hero{grid-template-columns:1fr}}
+.big{display:flex;flex-direction:column;justify-content:center;gap:10px;background:var(--primary);color:var(--primary-ink);border-radius:var(--radius);padding:22px}
+.big .num{font-size:60px;font-weight:600;line-height:1;letter-spacing:-1px}
+.big .lbl{opacity:.85}
+.split{display:flex;height:10px;border-radius:6px;overflow:hidden;background:rgba(255,255,255,.25)}
+.split i{display:block;height:100%}
+.split .a{background:#fff}.split .b{background:var(--amber)}
+.legend{display:flex;gap:16px;font-size:12px;opacity:.95}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.kpi{border:1px solid var(--line);border-radius:var(--radius);padding:14px;display:grid;gap:2px;align-content:center}
+.kpi b{font-size:26px;font-weight:600}
+.kpi span{color:var(--muted);font-size:12px}
+
+/* charts */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:20px}
+.cv{position:relative;height:270px}
+.cv.tall{height:330px}
+
+/* bars */
+.rows{display:grid;gap:10px}
+.row{display:grid;grid-template-columns:minmax(90px,1.2fr) 2fr auto;gap:10px;align-items:center}
+.row .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar{height:8px;background:var(--soft);border-radius:6px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--primary);border-radius:6px}
+.bar i.amber{background:var(--amber)}
+.row .v{font-size:12px;color:var(--muted);min-width:64px;text-align:end}
+
+/* recent list */
+.list{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+.list li{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.list li:last-child{border:0}
+.list small{color:var(--muted);display:block}
+
+/* tables */
+.tw{overflow:auto;border:1px solid var(--line);border-radius:8px;max-height:540px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:start;white-space:nowrap}
+thead th{position:sticky;top:0;background:var(--soft);z-index:2;font-weight:600}
+th.sort{cursor:pointer;user-select:none}
+th.sort[data-dir=asc]::after{content:" ▲";font-size:10px}
+th.sort[data-dir=desc]::after{content:" ▼";font-size:10px}
+tbody tr:hover{background:var(--soft)}
+td.num,th.num{text-align:center}
+td.zero{color:var(--muted)}
+td.heat{background:color-mix(in srgb,var(--primary) calc(var(--h)*65%),transparent)}
+.mx th:first-child,.mx td:first-child{position:sticky;inset-inline-start:0;background:var(--panel);z-index:1;font-weight:500;max-width:260px;overflow:hidden;text-overflow:ellipsis}
+.mx thead th:first-child{z-index:3;background:var(--soft)}
+.mx tfoot td{position:sticky;bottom:0;background:var(--soft);font-weight:600}
+.badge{padding:2px 8px;border-radius:20px;font-size:12px}
+.badge.ok{background:color-mix(in srgb,var(--primary) 18%,transparent);color:var(--primary)}
+.badge.off{background:color-mix(in srgb,var(--danger) 16%,transparent);color:var(--danger)}
+.ctl{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:12px}
+.ctl label{display:grid;gap:4px;font-size:12px;color:var(--muted)}
+.ctl input,.ctl select{width:auto;min-width:150px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;max-height:110px;overflow:auto;margin-bottom:12px}
+.chip{display:inline-flex}
+.chip input{position:absolute;opacity:0;pointer-events:none}
+.chip span{border:1px solid var(--line);border-radius:20px;padding:3px 10px;cursor:pointer;font-size:12px}
+.chip input:checked+span{background:var(--primary);color:var(--primary-ink);border-color:var(--primary)}
+.chip input:focus-visible+span{outline:2px solid var(--primary);outline-offset:2px}
+.pager{display:flex;justify-content:space-between;align-items:center;margin-top:10px;color:var(--muted);font-size:13px}
+.pager div{display:flex;gap:6px}
+.empty{padding:24px;text-align:center;color:var(--muted)}
+
+#gate .card.drop-on{border-color:var(--primary);background:var(--soft)}
+/* overlays */
+#gate{min-height:70vh;display:grid;place-items:center;padding:24px}
+#gate .card{max-width:440px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:32px;display:grid;gap:14px;text-align:center}
+#gate h2{margin:0}
+#gate p{margin:0;color:var(--muted)}
+#err{background:color-mix(in srgb,var(--danger) 14%,var(--panel));border:1px solid var(--danger);padding:12px 16px;border-radius:var(--radius);margin:16px 24px 0;display:flex;justify-content:space-between;gap:12px;align-items:center}
+#loading{position:fixed;inset:0;background:color-mix(in srgb,var(--bg) 85%,transparent);display:grid;place-items:center;z-index:50;font-weight:500}
+@media(prefers-reduced-motion:no-preference){.spin{animation:s 1s linear infinite}}
+@keyframes s{to{transform:rotate(360deg)}}
+.spin{width:28px;height:28px;border:3px solid var(--line);border-top-color:var(--primary);border-radius:50%;margin:0 auto 10px}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <h1>Workforce Dashboard</h1>
+  <span class="who" id="who" hidden></span>
+  <div class="seg" role="group" aria-label="Display language" id="langSeg" hidden>
+    <button data-lang="en" aria-pressed="true">EN</button>
+    <button data-lang="ar" aria-pressed="false">عربي</button>
+  </div>
+  <button class="btn" id="btnRefresh" hidden>Reload file</button>
+  <button class="btn" id="btnOut" hidden>Open another file</button>
+</header>
+
+<div id="err" hidden><span id="errMsg"></span><button class="btn" id="errRetry">Try again</button></div>
+
+<section id="gate">
+  <div class="card" id="drop">
+    <h2>Open your employee Excel file</h2>
+    <p>Choose the file from your computer or drop it anywhere on this page. Nothing is uploaded; the file is read inside your browser.</p>
+    <button class="btn primary" id="btnIn">Choose Excel file</button>
+    <p style="font-size:12px">Accepts .xlsx, .xlsm, .xls and .csv</p>
+  </div>
+</section>
+<input type="file" id="fileIn" accept=".xlsx,.xlsm,.xls,.csv" hidden>
+
+<div class="shell" id="app" hidden>
+  <aside class="filters" aria-label="Filters">
+    <h2>Filters</h2>
+    <label class="f">Search<input id="fSearch" type="search" placeholder="Name, code or position"></label>
+    <label class="f">Status<select id="fStatus"></select></label>
+    <label class="f">Location City<select id="fCity"></select></label>
+    <label class="f">Division<select id="fDivision"></select></label>
+    <label class="f">Department<select id="fDepartment"></select></label>
+    <label class="f">Position<select id="fPosition"></select></label>
+    <button class="btn" id="btnReset">Reset filters</button>
+    <div class="sub" id="fCount" style="color:var(--muted);font-size:12px"></div>
+  </aside>
+
+  <main>
+    <section class="panel">
+      <div class="head"><h3>Positions by city</h3><button class="btn" id="mxExport">Export CSV</button></div>
+      <p class="sub">Employees per position in each selected city (Location City). This table has its own filters and ignores the sidebar.</p>
+      <div class="ctl">
+        <label>Status<select id="mxStatus"><option value="all">All</option><option>Active</option><option>Inactive</option></select></label>
+        <label>Find position<input id="mxSearch" type="search" placeholder="Type to filter"></label>
+        <button class="btn" data-pick="all">All cities</button>
+        <button class="btn" data-pick="none">Clear</button>
+      </div>
+      <div class="chips" id="mxChips" role="group" aria-label="Cities shown"></div>
+      <div class="tw"><table class="mx" id="mxTable"></table></div>
+    </section>
+
+    <section class="hero">
+      <div class="big">
+        <div class="lbl">Employees in view</div>
+        <div class="num" id="kTotal">0</div>
+        <div class="split" aria-hidden="true"><i class="a" id="splitA"></i><i class="b" id="splitB"></i></div>
+        <div class="legend"><span id="kActive">0 active</span><span id="kInactive">0 inactive</span></div>
+      </div>
+      <div class="kpis">
+        <div class="kpi"><b id="kRate">0%</b><span>Active rate</span></div>
+        <div class="kpi"><b id="kLocs">0</b><span>Cities</span></div>
+        <div class="kpi"><b id="kPos">0</b><span>Distinct positions</span></div>
+        <div class="kpi"><b id="kDeps">0</b><span>Departments</span></div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <div class="panel"><h3>Status split</h3><div class="cv"><canvas id="cStatus"></canvas></div></div>
+      <div class="panel"><h3>Division share</h3><div class="cv"><canvas id="cDivision"></canvas></div></div>
+      <div class="panel"><h3>Headcount by city</h3><p class="sub">Top 12 cities</p><div class="cv tall"><canvas id="cLocation"></canvas></div></div>
+      <div class="panel"><h3>Headcount by department</h3><p class="sub">Top 12 departments</p><div class="cv tall"><canvas id="cDept"></canvas></div></div>
+      <div class="panel"><h3>Most common positions</h3><p class="sub">Top 10</p><div class="rows" id="lPos"></div></div>
+    </section>
+  </main>
+</div>
+
+<div id="loading" hidden><div><div class="spin"></div>Reading file…</div></div>
+
+<script>
+/* ---------- helpers ---------- */
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt = n => Number(n).toLocaleString("en-US");
+const pad = n => String(n).padStart(2, "0");
+const fmtDate = d => d ? `${pad(d.getUTCMonth()+1)}/${pad(d.getUTCDate())}/${d.getUTCFullYear()}` : "";
+const PALETTE = ["#1F7A5C","#E0A030","#3E6FB0","#C0503A","#7A5CA8","#4FA3A5","#9A8F3C","#B25D88","#6B7F8E","#8CB369"];
+
+/* ---------- state ---------- */
+let all = [], lang = "en", lastFile = null;
+const locAr = {}, posAr = {};
+const F = { search:"", status:"all", city:"all", division:"all", department:"all", position:"all" };
+let mxBranches = new Set();
+let view = [];
+
+/* ---------- parsing ---------- */
+const norm = h => String(h ?? "").trim().toLowerCase().replace(/\s+/g," ").replace(/\d+$/,"");
+const KEYS = {
+  "code":"code","name":"name","الاسم":"nameAr","position":"position","الوظيفه":"positionAr","الوظيفة":"positionAr",
+  "تاريخ التعيين":"hireDate","location":"location","location city":"city","الفرع":"branchAr","divison":"division","division":"division",
+  "department":"department","status":"status"
+};
+function parseDate(v) {
+  if (v === "" || v == null) return null;
+  if (typeof v === "number") return new Date(Math.round((v - 25569) * 86400000));
+  const m = String(v).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (m) return new Date(Date.UTC(+m[3], +m[1]-1, +m[2]));
+  const t = Date.parse(v);
+  return isNaN(t) ? null : new Date(t);
+}
+function parseRows(values) {
+  const idx = {};
+  values[0].forEach((h, i) => { const k = KEYS[norm(h)]; if (k && !(k in idx)) idx[k] = i; });
+  const out = [];
+  for (let i = 1; i < values.length; i++) {
+    const row = values[i];
+    if (row.every(c => c === "" || c == null)) continue;
+    const g = k => (k in idx && row[idx[k]] != null) ? String(row[idx[k]]).trim() : "";
+    const st = g("status").toLowerCase();
+    const r = {
+      code: g("code"), name: g("name"), nameAr: g("nameAr"), position: g("position"), positionAr: g("positionAr"),
+      hireDate: parseDate(row[idx.hireDate]), location: g("location"), city: ("city" in idx) ? g("city") : g("location"), branchAr: g("branchAr"),
+      division: g("division"), department: g("department"),
+      status: st === "active" ? "Active" : st === "inactive" ? "Inactive" : g("status")
+    };
+    if (!r.location) r.location = r.branchAr;
+    out.push(r);
+  }
+  return out;
+}
+
+/* ---------- labels (English / Arabic display) ---------- */
+const posLabel = p => (lang === "ar" && posAr[p]) || p || "(none)";
+const locLabel = l => l || "(none)";
+const branchLabel = r => (lang === "ar" && r.branchAr) || r.location;
+const nameLabel = r => (lang === "ar" && r.nameAr) || r.name || r.nameAr;
+
+/* ---------- reading the local Excel file ---------- */
+async function readFile(file) {
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: "array" });
+  for (const name of wb.SheetNames) {
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: "" });
+    const hi = rows.findIndex(r => r.some(c => KEYS[norm(c)] === "code") && r.some(c => KEYS[norm(c)] === "name"));
+    if (hi >= 0) return rows.slice(hi);
+  }
+  throw new Error("No sheet has both a 'Code' and a 'Name' column header.");
+}
+let lastMod = 0, mxKnown = new Set();
+async function loadFile(file, keep = false) {
+  if (!file) return;
+  if (!/\.(xlsx|xlsm|xls|csv)$/i.test(file.name)) { showError("Choose an Excel file (.xlsx, .xlsm, .xls) or a .csv file."); return; }
+  if (!keep) { $("err").hidden = true; $("loading").hidden = false; }
+  try {
+    const values = await readFile(file);
+    if (values.length < 2) throw new Error("The sheet has headers but no data rows.");
+    all = parseRows(values);
+    lastFile = file; lastMod = file.lastModified;
+    for (const k in locAr) delete locAr[k];
+    for (const k in posAr) delete posAr[k];
+    all.forEach(r => { if (r.location && r.branchAr) locAr[r.location] ||= r.branchAr; if (r.position && r.positionAr) posAr[r.position] ||= r.positionAr; });
+    if (!keep) { Object.assign(F, { search:"", status:"all", city:"all", division:"all", department:"all", position:"all" }); $("fSearch").value = ""; }
+    $("who").textContent = `${file.name} (${fmt(all.length)} rows), updated ${new Date().toLocaleTimeString()}`;
+    ["who","langSeg","btnRefresh","btnOut"].forEach(id => $(id).hidden = false);
+    $("gate").hidden = true; $("app").hidden = false;
+    const cs = getComputedStyle(document.documentElement);
+    Chart.defaults.color = cs.getPropertyValue("--muted").trim();
+    Chart.defaults.borderColor = cs.getPropertyValue("--line").trim();
+    Chart.defaults.font.family = '"IBM Plex Sans","IBM Plex Sans Arabic",sans-serif';
+    $("err").hidden = true;
+    buildFilters();
+    [["fStatus","status"],["fCity","city"],["fDivision","division"],["fDepartment","department"],["fPosition","position"]].forEach(([id, k]) => F[k] = $(id).value);
+    buildMatrixChips(keep); renderAll();
+  } catch (e) {
+    if (keep) return;
+    if (e.name === "NotReadableError") showError("The file changed after it was selected, so the browser refused to read it. Click “Reload file” (Chrome or Edge), or choose the file again.");
+    else showError("Could not read the file. " + e.message);
+  } finally { $("loading").hidden = true; }
+}
+function showError(m) { $("errMsg").textContent = m; $("err").hidden = false; }
+
+/* ---------- filters ---------- */
+const uniq = k => [...new Set(all.map(r => r[k]).filter(Boolean))].sort((a,b) => a.localeCompare(b));
+function fill(id, vals, labelFn = x => x) {
+  const el = $(id), cur = F[id.slice(1).toLowerCase()] || "all";
+  el.innerHTML = `<option value="all">All</option>` + vals.map(v => `<option value="${esc(v)}">${esc(labelFn(v))}</option>`).join("");
+  el.value = vals.includes(cur) ? cur : "all";
+}
+function buildFilters() {
+  fill("fStatus", uniq("status"));
+  fill("fCity", uniq("city"));
+  fill("fDivision", uniq("division"));
+  fill("fDepartment", uniq("department"));
+  fill("fPosition", uniq("position"), posLabel);
+}
+function applyFilters() {
+  const q = F.search.toLowerCase();
+  view = all.filter(r =>
+    (F.status === "all" || r.status === F.status) &&
+    (F.city === "all" || r.city === F.city) &&
+    (F.division === "all" || r.division === F.division) &&
+    (F.department === "all" || r.department === F.department) &&
+    (F.position === "all" || r.position === F.position) &&
+    (!q || [r.code, r.name, r.nameAr, r.position, r.positionAr].some(v => String(v).toLowerCase().includes(q)))
+  );
+}
+
+/* ---------- aggregation ---------- */
+function countBy(rows, fn) {
+  const m = new Map();
+  rows.forEach(r => { const k = fn(r) || "(none)"; m.set(k, (m.get(k) || 0) + 1); });
+  return [...m.entries()].sort((a, b) => b[1] - a[1]);
+}
+const charts = {};
+function chart(id, cfg) {
+  charts[id]?.destroy();
+  cfg.options = Object.assign({ responsive: true, maintainAspectRatio: false }, cfg.options);
+  charts[id] = new Chart($(id), cfg);
+}
+
+/* draws the numbers on the charts (no hovering needed) */
+const valueLabels = {
+  id: "valueLabels",
+  afterDatasetsDraw(c) {
+    const ctx = c.ctx, type = c.config.type, horiz = c.options.indexAxis === "y";
+    const ink = getComputedStyle(document.documentElement).getPropertyValue("--ink").trim() || "#222";
+    const onColor = hex => { const m = /^#?([0-9a-f]{6})$/i.exec(hex || ""); if (!m) return "#fff";
+      const n = parseInt(m[1], 16), l = 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255); return l > 150 ? "#111" : "#fff"; };
+    ctx.save(); ctx.font = '600 12px "IBM Plex Sans","IBM Plex Sans Arabic",sans-serif'; ctx.textBaseline = "middle";
+    c.data.datasets.forEach((ds, di) => {
+      const meta = c.getDatasetMeta(di); if (meta.hidden) return;
+      const total = ds.data.reduce((a, b) => a + b, 0);
+      meta.data.forEach((el, i) => {
+        const v = ds.data[i]; if (!v) return;
+        if (type === "bar") {
+          ctx.fillStyle = ink;
+          if (horiz) { ctx.textAlign = "left"; ctx.fillText(fmt(v), el.x + 6, el.y); }
+          else { ctx.textAlign = "center"; ctx.fillText(fmt(v), el.x, el.y - 10); }
+        } else {
+          const pct = total ? v / total * 100 : 0; if (pct < 3) return;
+          const p = el.tooltipPosition();
+          ctx.fillStyle = onColor(Array.isArray(ds.backgroundColor) ? ds.backgroundColor[i] : ds.backgroundColor);
+          ctx.textAlign = "center"; ctx.fillText(fmt(v), p.x, p.y - 7);
+          ctx.font = '500 11px "IBM Plex Sans",sans-serif'; ctx.fillText(pct.toFixed(0) + "%", p.x, p.y + 8);
+          ctx.font = '600 12px "IBM Plex Sans","IBM Plex Sans Arabic",sans-serif';
+        }
+      });
+    });
+    ctx.restore();
+  }
+};
+Chart.register(valueLabels);
+
+/* ---------- render ---------- */
+function renderAll() {
+  applyFilters();
+  renderHero(); renderCharts(); renderLists(); renderMatrix();
+}
+function renderHero() {
+  const t = view.length, a = view.filter(r => r.status === "Active").length, i = view.filter(r => r.status === "Inactive").length;
+  $("kTotal").textContent = fmt(t);
+  $("kActive").textContent = fmt(a) + " active"; $("kInactive").textContent = fmt(i) + " inactive";
+  $("splitA").style.width = (t ? a / t * 100 : 0) + "%"; $("splitB").style.width = (t ? i / t * 100 : 0) + "%";
+  $("kRate").textContent = (t ? (a / t * 100).toFixed(1) : 0) + "%";
+  $("kLocs").textContent = fmt(new Set(view.map(r => r.city).filter(Boolean)).size);
+  $("kPos").textContent = fmt(new Set(view.map(r => r.position).filter(Boolean)).size);
+  $("kDeps").textContent = fmt(new Set(view.map(r => r.department).filter(Boolean)).size);
+  $("fCount").textContent = `Showing ${fmt(t)} of ${fmt(all.length)} employees`;
+}
+function renderCharts() {
+  const st = countBy(view, r => r.status);
+  chart("cStatus", { type: "doughnut", data: { labels: st.map(x => `${x[0]} (${fmt(x[1])})`), datasets: [{ data: st.map(x => x[1]), backgroundColor: st.map(x => x[0] === "Active" ? "#1F7A5C" : x[0] === "Inactive" ? "#C0503A" : "#6B7F8E"), borderWidth: 0 }] }, options: { cutout: "62%", plugins: { legend: { position: "bottom" } } } });
+
+  const dv = countBy(view, r => r.division);
+  chart("cDivision", { type: "pie", data: { labels: dv.map(x => `${x[0]} (${fmt(x[1])})`), datasets: [{ data: dv.map(x => x[1]), backgroundColor: PALETTE, borderWidth: 0 }] }, options: { plugins: { legend: { position: "bottom" } } } });
+
+  const lc = countBy(view, r => r.city).slice(0, 12);
+  chart("cLocation", { type: "bar", data: { labels: lc.map(x => locLabel(x[0])), datasets: [{ label: "Employees", data: lc.map(x => x[1]), backgroundColor: "#1F7A5C", borderRadius: 4 }] }, options: { indexAxis: "y", layout: { padding: { right: 44 } }, plugins: { legend: { display: false } } } });
+
+  const dc = countBy(view, r => r.department).slice(0, 12);
+  chart("cDept", { type: "bar", data: { labels: dc.map(x => x[0]), datasets: [{ label: "Employees", data: dc.map(x => x[1]), backgroundColor: "#E0A030", borderRadius: 4 }] }, options: { indexAxis: "y", layout: { padding: { right: 44 } }, plugins: { legend: { display: false } } } });
+}
+function renderLists() {
+  const tp = countBy(view, r => r.position).slice(0, 10), mx = tp[0]?.[1] || 1;
+  $("lPos").innerHTML = tp.length ? tp.map(([p, n]) => `<div class="row"><span class="t" dir="auto" title="${esc(posLabel(p))}">${esc(posLabel(p))}</span><div class="bar"><i class="amber" style="width:${n / mx * 100}%"></i></div><span class="v">${fmt(n)}</span></div>`).join("") : `<div class="empty">No data for these filters.</div>`;
+}
+
+/* ---------- position × location matrix ---------- */
+function buildMatrixChips(keep) {
+  const locs = countBy(all, r => r.city).map(x => x[0]);
+  mxBranches = new Set(keep ? locs.filter(l => mxBranches.has(l) || !mxKnown.has(l)) : locs);
+  mxKnown = new Set(locs);
+  $("mxChips").innerHTML = locs.map(l => `<label class="chip"><input type="checkbox" value="${esc(l)}" ${mxBranches.has(l) ? "checked" : ""}><span dir="auto">${esc(locLabel(l))}</span></label>`).join("");
+}
+function syncChips() { document.querySelectorAll("#mxChips input").forEach(c => c.checked = mxBranches.has(c.value)); }
+let mxData = { cols: [], rows: [] };
+function renderMatrix() {
+  document.querySelectorAll("#mxChips .chip").forEach(l => { const i = l.querySelector("input"); l.querySelector("span").textContent = locLabel(i.value); });
+  const st = $("mxStatus").value, q = $("mxSearch").value.trim().toLowerCase();
+  const src = all.filter(r => st === "all" || r.status === st);
+  const cols = [...mxBranches].sort((a, b) => a.localeCompare(b));
+  const map = new Map();
+  src.forEach(r => {
+    if (!mxBranches.has(r.city)) return;
+    const p = r.position || "(none)";
+    if (q && !(p.toLowerCase().includes(q) || (posAr[p] || "").includes(q))) return;
+    if (!map.has(p)) map.set(p, { total: 0, by: {} });
+    const o = map.get(p); o.total++; o.by[r.city] = (o.by[r.city] || 0) + 1;
+  });
+  const rows = [...map.entries()].sort((a, b) => b[1].total - a[1].total);
+  mxData = { cols, rows };
+  if (!cols.length) { $("mxTable").innerHTML = `<tbody><tr><td class="empty">Select at least one city above.</td></tr></tbody>`; return; }
+  if (!rows.length) { $("mxTable").innerHTML = `<tbody><tr><td class="empty">No positions match these options.</td></tr></tbody>`; return; }
+  const max = Math.max(...rows.flatMap(([, o]) => cols.map(c => o.by[c] || 0)), 1);
+  const colTot = cols.map(c => rows.reduce((s, [, o]) => s + (o.by[c] || 0), 0));
+  $("mxTable").innerHTML =
+    `<thead><tr><th>Position</th>${cols.map(c => `<th class="num" dir="auto">${esc(locLabel(c))}</th>`).join("")}<th class="num">Total</th></tr></thead><tbody>` +
+    rows.map(([p, o]) => `<tr><td dir="auto" title="${esc(posLabel(p))}">${esc(posLabel(p))}</td>${cols.map(c => { const n = o.by[c] || 0; return n ? `<td class="num heat" style="--h:${n / max}">${fmt(n)}</td>` : `<td class="num zero">–</td>`; }).join("")}<td class="num"><b>${fmt(o.total)}</b></td></tr>`).join("") +
+    `</tbody><tfoot><tr><td>Total</td>${colTot.map(n => `<td class="num">${fmt(n)}</td>`).join("")}<td class="num">${fmt(colTot.reduce((a, b) => a + b, 0))}</td></tr></tfoot>`;
+}
+
+/* ---------- CSV export ---------- */
+function download(name, rows) {
+  const csv = rows.map(r => r.map(c => `"${String(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" }));
+  a.download = name; a.click(); URL.revokeObjectURL(a.href);
+}
+
+/* ---------- events ---------- */
+let fileHandle = null, busy = false;
+const PICKER_TYPES = [{ description: "Excel or CSV", accept: {
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx", ".xlsm"],
+  "application/vnd.ms-excel": [".xls"], "text/csv": [".csv"] } }];
+async function pick() {
+  if (window.showOpenFilePicker) {
+    try {
+      const [h] = await showOpenFilePicker({ types: PICKER_TYPES });
+      fileHandle = h; await loadFile(await h.getFile()); return;
+    } catch (e) { if (e.name === "AbortError") return; }
+  }
+  $("fileIn").click();   // browsers without the file-handle API (Firefox, Safari)
+}
+async function reload() {
+  if (fileHandle) {
+    try { await loadFile(await fileHandle.getFile()); return; }
+    catch (e) { showError("Could not reach the file. Choose it again."); return; }
+  }
+  showError("This browser can't re-read a file after it changes. Choose the file again, or use Chrome or Edge for automatic reload.");
+}
+$("btnIn").onclick = pick;
+$("btnOut").onclick = pick;
+$("errRetry").onclick = pick;
+$("btnRefresh").onclick = reload;
+$("fileIn").onchange = e => { fileHandle = null; loadFile(e.target.files[0]); e.target.value = ""; };
+/* Chrome/Edge: when the file is saved in Excel, reload it automatically and keep the filters */
+setInterval(async () => {
+  if (!fileHandle || busy || document.hidden) return;
+  try {
+    const f = await fileHandle.getFile();
+    if (f.lastModified !== lastMod) { busy = true; await loadFile(f, true); }
+  } catch (_) { /* Excel may still be writing; try again on the next tick */ }
+  finally { busy = false; }
+}, 3000);
+["dragenter","dragover"].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); $("drop").classList.add("drop-on"); }));
+["dragleave","drop"].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); $("drop").classList.remove("drop-on"); }));
+document.addEventListener("drop", async e => {
+  const item = e.dataTransfer.items && e.dataTransfer.items[0];
+  const hp = item && item.getAsFileSystemHandle ? item.getAsFileSystemHandle() : null;   // must be requested inside the event
+  const file = e.dataTransfer.files[0];
+  fileHandle = null;
+  if (hp) { try { const h = await hp; if (h && h.kind === "file") { fileHandle = h; await loadFile(await h.getFile()); return; } } catch (_) {} }
+  loadFile(file);
+});
+
+let timer;
+$("fSearch").oninput = e => { clearTimeout(timer); timer = setTimeout(() => { F.search = e.target.value; renderAll(); }, 200); };
+[["fStatus","status"],["fCity","city"],["fDivision","division"],["fDepartment","department"],["fPosition","position"]]
+  .forEach(([id, k]) => $(id).onchange = e => { F[k] = e.target.value || "all"; renderAll(); });
+$("btnReset").onclick = () => {
+  Object.assign(F, { search:"", status:"all", city:"all", division:"all", department:"all", position:"all" });
+  $("fSearch").value = ""; buildFilters(); renderAll();
+};
+$("langSeg").onclick = e => {
+  const b = e.target.closest("button"); if (!b) return;
+  lang = b.dataset.lang;
+  document.querySelectorAll("#langSeg button").forEach(x => x.setAttribute("aria-pressed", x === b));
+  buildFilters(); renderAll();
+};
+$("mxChips").onchange = e => { e.target.checked ? mxBranches.add(e.target.value) : mxBranches.delete(e.target.value); renderMatrix(); };
+$("mxStatus").onchange = renderMatrix;
+$("mxSearch").oninput = renderMatrix;
+document.querySelectorAll("[data-pick]").forEach(b => b.onclick = () => {
+  const locs = countBy(all, r => r.city).map(x => x[0]);
+  mxBranches = new Set(b.dataset.pick === "all" ? locs : []);
+  syncChips(); renderMatrix();
+});
+$("mxExport").onclick = () => download("positions-by-city.csv",
+  [["Position", ...mxData.cols, "Total"], ...mxData.rows.map(([p, o]) => [p, ...mxData.cols.map(c => o.by[c] || 0), o.total])]);
+
+</script>
+</body>
+</html>
